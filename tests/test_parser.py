@@ -18,7 +18,7 @@ status,string,True,,,active|inactive|pending,,Account status
 
     assert rules[0].field_name == "age"
     assert rules[0].data_type == "integer"
-    assert rules[0].required == "True"
+    assert rules[0].required == "true"
     assert rules[0].minimum == 18
     assert rules[0].maximum == 65
 

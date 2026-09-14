@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.models import FieldRule
+from src.models import RawFieldRule
 
 
 REQUIRED_COLUMNS = {
@@ -18,17 +18,15 @@ OPTIONAL_COLUMNS = {
 }
 
 
-def parse_rule_table(file) -> list[FieldRule]:
-    """
-    Read a CSV rule table and convert each row into a FieldRule object.
-    """
+def parse_rule_table(file) -> list[RawFieldRule]:
+    """Read a CSV rule table and convert rows into RawFieldRule objects."""
 
     df = pd.read_csv(file)
 
     if df.empty:
         raise ValueError("The rule table is empty.")
 
-    # Remove accidental CSV index columns
+    # Remove accidental index columns such as "Unnamed: 0".
     df = df.loc[:, ~df.columns.str.startswith("Unnamed:")]
 
     missing_columns = REQUIRED_COLUMNS - set(df.columns)
@@ -37,13 +35,13 @@ def parse_rule_table(file) -> list[FieldRule]:
         missing = ", ".join(sorted(missing_columns))
         raise ValueError(f"Missing required columns: {missing}")
 
-    # Check for empty field names
-    field_names = df["field_name"].astype(str).str.strip()
+    # Check for missing field names.
+    field_names = df["field_name"].fillna("").astype(str).str.strip()
 
     if field_names.eq("").any():
         raise ValueError("Field name cannot be empty.")
 
-    # Check for duplicate field names
+    # Check for duplicate field names.
     duplicates = field_names[field_names.duplicated()].unique()
 
     if len(duplicates) > 0:
@@ -52,7 +50,7 @@ def parse_rule_table(file) -> list[FieldRule]:
             f"Duplicate field name(s) found: {duplicate_names}"
         )
 
-    # Add optional columns if they are not present.
+    # Add optional columns when they are not provided.
     for column in OPTIONAL_COLUMNS:
         if column not in df.columns:
             df[column] = None
@@ -60,10 +58,9 @@ def parse_rule_table(file) -> list[FieldRule]:
     rules = []
 
     for _, row in df.iterrows():
-
-        rule = FieldRule(
+        rule = RawFieldRule(
             field_name=str(row["field_name"]).strip(),
-            data_type=str(row["type"]).strip().lower(),
+            data_type=row["type"],
             required=row["required"],
             minimum=row["min"],
             maximum=row["max"],

@@ -170,6 +170,8 @@ if uploaded_file is not None:
             row = {
                 "case_id": index,
                 "case_type": result["case_type"],
+                "field_name": result.get("field_name"),
+                "test_reason": result.get("test_reason"),
                 "expected": (
                     "VALID"
                     if result["expected_valid"] is True

@@ -129,6 +129,7 @@ def validate_test_case(
     return {
         "case_type": test_case.get("case_type"),
         "field_name": test_case.get("field_name"),
+        "test_reason": test_case.get("test_reason"),
         "expected_valid": expected_valid,
         "actual_valid": actual_valid,
         "valid": actual_valid,

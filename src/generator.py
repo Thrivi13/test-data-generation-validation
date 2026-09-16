@@ -44,35 +44,46 @@ def _generate_valid_value(rule: FieldRule) -> Any:
 
 
 def _generate_boundary_values(rule: FieldRule) -> list[Any]:
-    """Generate values around the defined boundaries."""
+    """Generate values at and around the defined boundaries."""
 
     values = []
 
-    if rule.minimum is not None:
-        values.append(rule.minimum)
-
-    if rule.maximum is not None and rule.maximum != rule.minimum:
-        values.append(rule.maximum)
-
     if rule.data_type == "string":
-        if rule.minimum is not None and rule.minimum > 0:
-            values.append("a" * (int(rule.minimum) - 1))
+        if rule.minimum is not None:
+            minimum = int(rule.minimum)
+
+            # Exactly minimum length
+            values.append("a" * minimum)
+
+            # Just below minimum
+            if minimum > 0:
+                values.append("a" * (minimum - 1))
 
         if rule.maximum is not None:
-            values.append("a" * (int(rule.maximum) + 1))
+            maximum = int(rule.maximum)
+
+            # Exactly maximum length
+            values.append("a" * maximum)
+
+            # Just above maximum
+            values.append("a" * (maximum + 1))
 
     elif rule.data_type == "integer":
         if rule.minimum is not None:
+            values.append(rule.minimum)
             values.append(rule.minimum - 1)
 
         if rule.maximum is not None:
+            values.append(rule.maximum)
             values.append(rule.maximum + 1)
 
     elif rule.data_type == "float":
         if rule.minimum is not None:
+            values.append(rule.minimum)
             values.append(rule.minimum - 0.1)
 
         if rule.maximum is not None:
+            values.append(rule.maximum)
             values.append(rule.maximum + 0.1)
 
     return values
@@ -126,7 +137,7 @@ def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
 
     test_cases = []
 
-    # One valid case containing valid values for all fields.
+    # Generate one valid case containing valid values for all fields.
     valid_case = {
         rule.field_name: _generate_valid_value(rule)
         for rule in rules

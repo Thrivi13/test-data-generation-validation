@@ -43,8 +43,8 @@ def _generate_valid_value(rule: FieldRule) -> Any:
     return "test"
 
 
-def _generate_boundary_values(rule: FieldRule) -> list[Any]:
-    """Generate values at and around the defined boundaries."""
+def _generate_boundary_values(rule: FieldRule) -> list[tuple[Any, bool]]:
+    """Generate boundary values along with their expected validity."""
 
     values = []
 
@@ -52,39 +52,51 @@ def _generate_boundary_values(rule: FieldRule) -> list[Any]:
         if rule.minimum is not None:
             minimum = int(rule.minimum)
 
-            # Exactly minimum length
-            values.append("a" * minimum)
+            # Exactly at minimum -> valid
+            values.append(("a" * minimum, True))
 
-            # Just below minimum
+            # Just below minimum -> invalid
             if minimum > 0:
-                values.append("a" * (minimum - 1))
+                values.append(("a" * (minimum - 1), False))
 
         if rule.maximum is not None:
             maximum = int(rule.maximum)
 
-            # Exactly maximum length
-            values.append("a" * maximum)
+            # Exactly at maximum -> valid
+            values.append(("a" * maximum, True))
 
-            # Just above maximum
-            values.append("a" * (maximum + 1))
+            # Just above maximum -> invalid
+            values.append(("a" * (maximum + 1), False))
 
     elif rule.data_type == "integer":
         if rule.minimum is not None:
-            values.append(rule.minimum)
-            values.append(rule.minimum - 1)
+            # Exactly at minimum -> valid
+            values.append((rule.minimum, True))
+
+            # Just below minimum -> invalid
+            values.append((rule.minimum - 1, False))
 
         if rule.maximum is not None:
-            values.append(rule.maximum)
-            values.append(rule.maximum + 1)
+            # Exactly at maximum -> valid
+            values.append((rule.maximum, True))
+
+            # Just above maximum -> invalid
+            values.append((rule.maximum + 1, False))
 
     elif rule.data_type == "float":
         if rule.minimum is not None:
-            values.append(rule.minimum)
-            values.append(rule.minimum - 0.1)
+            # Exactly at minimum -> valid
+            values.append((rule.minimum, True))
+
+            # Just below minimum -> invalid
+            values.append((rule.minimum - 0.1, False))
 
         if rule.maximum is not None:
-            values.append(rule.maximum)
-            values.append(rule.maximum + 0.1)
+            # Exactly at maximum -> valid
+            values.append((rule.maximum, True))
+
+            # Just above maximum -> invalid
+            values.append((rule.maximum + 0.1, False))
 
     return values
 
@@ -129,10 +141,28 @@ def _generate_invalid_value(rule: FieldRule) -> Any:
     return ""
 
 
+def _generate_wrong_type_value(rule: FieldRule) -> Any:
+    """Generate a value with an incorrect data type."""
+
+    if rule.data_type == "string":
+        return 12345
+
+    if rule.data_type == "integer":
+        return "not_an_integer"
+
+    if rule.data_type == "float":
+        return "not_a_float"
+
+    if rule.data_type == "boolean":
+        return "not_a_boolean"
+
+    return None
+
+
 def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
     """
-    Generate valid, boundary, and invalid test cases
-    from normalized field rules.
+    Generate valid, boundary, invalid, missing-required,
+    and wrong-type test cases from normalized field rules.
     """
 
     test_cases = []
@@ -146,6 +176,7 @@ def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
     test_cases.append(
         {
             "case_type": "valid",
+            "expected_valid": True,
             "data": valid_case,
         }
     )
@@ -154,7 +185,7 @@ def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
     for rule in rules:
         boundary_values = _generate_boundary_values(rule)
 
-        for value in boundary_values:
+        for value, expected_valid in boundary_values:
             case_data = valid_case.copy()
             case_data[rule.field_name] = value
 
@@ -162,6 +193,7 @@ def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
                 {
                     "case_type": "boundary",
                     "field_name": rule.field_name,
+                    "expected_valid": expected_valid,
                     "data": case_data,
                 }
             )
@@ -175,6 +207,36 @@ def generate_test_cases(rules: list[FieldRule]) -> list[dict]:
             {
                 "case_type": "invalid",
                 "field_name": rule.field_name,
+                "expected_valid": False,
+                "data": case_data,
+            }
+        )
+
+    # Generate missing-required cases field-by-field.
+    for rule in rules:
+        if rule.required:
+            case_data = valid_case.copy()
+            case_data[rule.field_name] = None
+
+            test_cases.append(
+                {
+                    "case_type": "missing_required",
+                    "field_name": rule.field_name,
+                    "expected_valid": False,
+                    "data": case_data,
+                }
+            )
+
+    # Generate wrong-data-type cases field-by-field.
+    for rule in rules:
+        case_data = valid_case.copy()
+        case_data[rule.field_name] = _generate_wrong_type_value(rule)
+
+        test_cases.append(
+            {
+                "case_type": "wrong_type",
+                "field_name": rule.field_name,
+                "expected_valid": False,
                 "data": case_data,
             }
         )

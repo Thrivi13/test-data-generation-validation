@@ -1,4 +1,4 @@
 pandas
 streamlit
 pytest
-openai
+google-genai

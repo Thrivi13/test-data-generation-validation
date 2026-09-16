@@ -21,6 +21,16 @@ def summarize_results(results: list[dict]) -> dict:
         if result.get("case_type") == "boundary"
     )
 
+    expectation_matches = sum(
+        1 for result in results
+        if result.get("matches_expectation") is True
+    )
+
+    expectation_mismatches = sum(
+        1 for result in results
+        if result.get("matches_expectation") is False
+    )
+
     case_types = Counter(
         result.get("case_type")
         for result in results
@@ -31,6 +41,8 @@ def summarize_results(results: list[dict]) -> dict:
         "valid_cases": valid_cases,
         "invalid_cases": invalid_cases,
         "boundary_cases": boundary_cases,
+        "expectation_matches": expectation_matches,
+        "expectation_mismatches": expectation_mismatches,
         "case_type_counts": dict(case_types),
     }
 

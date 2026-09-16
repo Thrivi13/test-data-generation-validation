@@ -102,7 +102,7 @@ def validate_test_case(
     data = test_case.get("data", {})
 
     field_results = {}
-    overall_valid = True
+    actual_valid = True
 
     for rule in rules:
         value = data.get(rule.field_name)
@@ -116,13 +116,24 @@ def validate_test_case(
         }
 
         if not is_valid:
-            overall_valid = False
+            actual_valid = False
+
+    expected_valid = test_case.get("expected_valid")
+
+    matches_expectation = (
+        None
+        if expected_valid is None
+        else expected_valid == actual_valid
+    )
 
     return {
         "case_type": test_case.get("case_type"),
         "field_name": test_case.get("field_name"),
+        "expected_valid": expected_valid,
+        "actual_valid": actual_valid,
+        "valid": actual_valid,
+        "matches_expectation": matches_expectation,
         "data": data,
-        "valid": overall_valid,
         "field_results": field_results,
     }
 

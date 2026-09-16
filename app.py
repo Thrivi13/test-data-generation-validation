@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from src.ai_explainer import explain_validation_result
+from src.ai_explainer import explain_validation_results
 from src.generator import generate_test_cases
 from src.rule_normalizer import normalize_rule
 from src.rule_parser import parse_rule_table
@@ -37,9 +37,19 @@ if uploaded_file is not None:
 
     try:
         uploaded_file.seek(0)
+
         input_df = pd.read_csv(uploaded_file)
 
-        st.dataframe(input_df, use_container_width=True)
+        # Remove accidental index columns.
+        input_df = input_df.loc[
+            :,
+            ~input_df.columns.str.startswith("Unnamed:"),
+        ]
+
+        st.dataframe(
+            input_df,
+            use_container_width=True,
+        )
 
     except Exception as exc:
         st.error(f"Unable to read the CSV file: {exc}")
@@ -71,45 +81,114 @@ if uploaded_file is not None:
     # ---------------------------------------------------------
     if st.button("Generate and Validate Test Data"):
 
-        test_cases = generate_test_cases(normalized_rules)
+        test_cases = generate_test_cases(
+            normalized_rules
+        )
 
         validation_results = validate_test_cases(
             test_cases,
             normalized_rules,
         )
 
-        summary = summarize_results(validation_results)
+        summary = summarize_results(
+            validation_results
+        )
 
         # Store results so they remain available after reruns.
-        st.session_state["validation_results"] = validation_results
+        st.session_state["validation_results"] = (
+            validation_results
+        )
+
         st.session_state["summary"] = summary
+
+        # Remove previous AI explanations when new results
+        # are generated.
+        st.session_state.pop(
+            "ai_explanations",
+            None,
+        )
 
     # ---------------------------------------------------------
     # 4. Display results
     # ---------------------------------------------------------
     if "validation_results" in st.session_state:
 
-        validation_results = st.session_state["validation_results"]
+        validation_results = (
+            st.session_state["validation_results"]
+        )
+
         summary = st.session_state["summary"]
 
+        # -----------------------------------------------------
+        # Validation Summary
+        # -----------------------------------------------------
         st.subheader("Validation Summary")
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-        col1.metric("Total Cases", summary["total_cases"])
-        col2.metric("Valid Cases", summary["valid_cases"])
-        col3.metric("Invalid Cases", summary["invalid_cases"])
-        col4.metric("Boundary Cases", summary["boundary_cases"])
+        col1.metric(
+            "Total Cases",
+            summary["total_cases"],
+        )
 
+        col2.metric(
+            "Valid Cases",
+            summary["valid_cases"],
+        )
+
+        col3.metric(
+            "Invalid Cases",
+            summary["invalid_cases"],
+        )
+
+        col4.metric(
+            "Boundary Cases",
+            summary["boundary_cases"],
+        )
+
+        col5.metric(
+            "Expectation Matches",
+            summary["expectation_matches"],
+        )
+
+        col6.metric(
+            "Expectation Mismatches",
+            summary["expectation_mismatches"],
+        )
+
+        # -----------------------------------------------------
+        # Generated Test Data
+        # -----------------------------------------------------
         st.subheader("Generated Test Data")
 
         table_rows = []
 
-        for index, result in enumerate(validation_results, start=1):
+        for index, result in enumerate(
+            validation_results,
+            start=1,
+        ):
             row = {
                 "case_id": index,
                 "case_type": result["case_type"],
-                "valid": result["valid"],
+                "expected": (
+                    "VALID"
+                    if result["expected_valid"] is True
+                    else "INVALID"
+                    if result["expected_valid"] is False
+                    else "N/A"
+                ),
+                "actual": (
+                    "VALID"
+                    if result["actual_valid"]
+                    else "INVALID"
+                ),
+                "match": (
+                    "YES"
+                    if result["matches_expectation"] is True
+                    else "NO"
+                    if result["matches_expectation"] is False
+                    else "N/A"
+                ),
             }
 
             row.update(result["data"])
@@ -117,13 +196,33 @@ if uploaded_file is not None:
 
         results_df = pd.DataFrame(table_rows)
 
+        # Remove any accidental index columns.
+        results_df = results_df.loc[
+            :,
+            ~results_df.columns.str.startswith("Unnamed:"),
+        ]
+
         st.dataframe(
             results_df,
             use_container_width=True,
         )
 
         # -----------------------------------------------------
-        # 5. Detailed validation results
+        # Download Results
+        # -----------------------------------------------------
+        csv_data = results_df.to_csv(
+            index=False
+        )
+
+        st.download_button(
+            label="Download Test Results as CSV",
+            data=csv_data,
+            file_name="test_data_results.csv",
+            mime="text/csv",
+        )
+
+        # -----------------------------------------------------
+        # 5. Detailed Validation Results
         # -----------------------------------------------------
         st.subheader("Validation Details")
 
@@ -132,15 +231,37 @@ if uploaded_file is not None:
             start=1,
         ):
 
-            status = "VALID" if result["valid"] else "INVALID"
+            status = (
+                "VALID"
+                if result["actual_valid"]
+                else "INVALID"
+            )
 
             with st.expander(
-                f"Case {index} — {result['case_type'].upper()} — {status}"
+                f"Case {index} — "
+                f"{result['case_type'].upper()} — "
+                f"{status}"
             ):
 
-                for field_name, field_result in result[
-                    "field_results"
-                ].items():
+                st.write(
+                    f"**Expected:** "
+                    f"{'VALID' if result['expected_valid'] is True else 'INVALID' if result['expected_valid'] is False else 'N/A'}"
+                )
+
+                st.write(
+                    f"**Actual:** "
+                    f"{'VALID' if result['actual_valid'] else 'INVALID'}"
+                )
+
+                st.write(
+                    f"**Expectation Match:** "
+                    f"{'YES' if result['matches_expectation'] is True else 'NO' if result['matches_expectation'] is False else 'N/A'}"
+                )
+
+                for (
+                    field_name,
+                    field_result,
+                ) in result["field_results"].items():
 
                     field_status = (
                         "✓ Valid"
@@ -155,28 +276,77 @@ if uploaded_file is not None:
                     )
 
         # -----------------------------------------------------
-        # 6. AI explanations
+        # 6. AI Case Summaries
         # -----------------------------------------------------
-        st.subheader("AI Explanations")
+        st.subheader("AI Case Summaries")
 
-        api_configured = bool(os.getenv("OPENAI_API_KEY"))
+        api_configured = bool(
+            os.getenv("GEMINI_API_KEY")
+        )
 
         if not api_configured:
+
             st.info(
                 "AI explanations are unavailable because "
-                "OPENAI_API_KEY is not configured."
+                "GEMINI_API_KEY is not configured."
             )
-        else:
-            if st.button("Generate AI Explanations"):
 
-                for index, result in enumerate(
-                    validation_results,
-                    start=1,
+        else:
+
+            if st.button("Generate AI Summaries"):
+
+                with st.spinner(
+                    "Generating AI summaries..."
                 ):
 
-                    explanation = explain_validation_result(result)
+                    explanations = (
+                        explain_validation_results(
+                            validation_results
+                        )
+                    )
 
-                    with st.expander(
-                        f"Case {index} — {result['case_type'].upper()}"
-                    ):
-                        st.write(explanation)
+                st.session_state["ai_explanations"] = (
+                    explanations
+                )
+
+            # -------------------------------------------------
+            # Display AI summaries inside the result table
+            # -------------------------------------------------
+            if "ai_explanations" in st.session_state:
+
+                explanations = (
+                    st.session_state["ai_explanations"]
+                )
+
+                results_with_summary = results_df.copy()
+
+                results_with_summary["Summary"] = (
+                    explanations
+                )
+
+                st.subheader(
+                    "Test Results with AI Summary"
+                )
+
+                st.dataframe(
+                    results_with_summary,
+                    use_container_width=True,
+                )
+
+                # -------------------------------------------------
+                # Download results including AI summaries
+                # -------------------------------------------------
+                summary_csv = (
+                    results_with_summary.to_csv(
+                        index=False
+                    )
+                )
+
+                st.download_button(
+                    label="Download Results with AI Summary",
+                    data=summary_csv,
+                    file_name=(
+                        "test_data_results_with_summary.csv"
+                    ),
+                    mime="text/csv",
+                )

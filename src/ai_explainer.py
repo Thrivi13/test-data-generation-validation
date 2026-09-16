@@ -1,43 +1,87 @@
 import os
 
-from openai import OpenAI
+from google import genai
 
 
-def explain_validation_result(result: dict) -> str:
+def explain_validation_results(results: list[dict]) -> list[str]:
     """
-    Generate a short explanation of an already-determined
-    validation result.
+    Generate one short AI explanation for each validation result.
 
-    The validation decision is made entirely by Python.
+    Python determines validity.
+    Gemini only explains the already-determined results.
     """
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        return "AI explanation unavailable: OPENAI_API_KEY is not configured."
+        return [
+            "AI explanation unavailable: GEMINI_API_KEY is not configured."
+            for _ in results
+        ]
 
-    client = OpenAI(api_key=api_key)
+    client = genai.Client(api_key=api_key)
+
+    cases = []
+
+    for index, result in enumerate(results, start=1):
+        cases.append(
+            {
+                "case_id": index,
+                "case_type": result.get("case_type"),
+                "valid": result.get("valid"),
+                "field_results": result.get("field_results"),
+            }
+        )
 
     prompt = f"""
-Explain the following test-data validation result briefly and clearly.
+You are explaining test-data validation results.
 
-Case type: {result.get("case_type")}
-Python validation result: {"VALID" if result.get("valid") else "INVALID"}
+Python has ALREADY determined whether each test case is valid or invalid.
+Your job is ONLY to provide a short explanation for each case.
 
-Field validation details:
-{result.get("field_results")}
+Do not change, reinterpret, or recalculate the Python validation result.
 
-Important:
-- Do not change or reinterpret the Python validation result.
-- Do not perform validation yourself.
-- Explain why the provided result occurred.
-- Mention relevant boundary or rule violations when applicable.
-- Keep the explanation to 2-4 sentences.
+For every case, return exactly one short explanation.
+The explanations must be returned in the same order as the cases.
+
+Rules:
+- For a valid case, briefly explain why the data satisfies the rules.
+- For an invalid case, identify the field and rule that was violated.
+- For a boundary case, mention the relevant boundary value or just-outside value.
+- Keep each explanation to 1-2 sentences.
+- Do not add numbering.
+- Do not add headings.
+- Return one explanation per line.
+
+Validation results:
+{cases}
 """
 
-    response = client.responses.create(
-        model="gpt-5-mini",
-        input=prompt,
-    )
+    try:
+        interaction = client.interactions.create(
+            model="gemini-3.6-flash",
+            input=prompt,
+        )
 
-    return response.output_text.strip()
+        explanations = [
+            line.strip()
+            for line in interaction.output_text.splitlines()
+            if line.strip()
+        ]
+
+        # Ensure exactly one explanation is available for every case.
+        if len(explanations) < len(results):
+            explanations.extend(
+                [
+                    "AI explanation was not generated for this case."
+                    for _ in range(len(results) - len(explanations))
+                ]
+            )
+
+        return explanations[:len(results)]
+
+    except Exception as exc:
+        return [
+            f"AI explanation unavailable: {exc}"
+            for _ in results
+        ]
